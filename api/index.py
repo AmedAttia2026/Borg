@@ -9,21 +9,14 @@ from flask_limiter.util import get_remote_address
 from datetime import datetime
 import pytz
 
-# استيراد مكتبة Pillow لمعالجة وتحويل كافة امتدادات الصور
 from PIL import Image
 
-# استيراد مكتبات Cloudinary الرسمية
 import cloudinary
 import cloudinary.uploader
 
-# 🛠️ الحل السحابي الذكي: تحديد مسار الـ templates ديناميكياً ليتوافق هيدروليكياً مع بيئة Vercel Serverless
-base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-template_dir = os.path.join(base_dir, 'templates')
-
-app = Flask(__name__, template_folder=template_dir if os.path.exists(template_dir) else 'templates')
+app = Flask(__name__, template_folder='../templates')
 app.secret_key = "Borg_Elarab_REALESTATE_VIP_2026_Secure"
 
-# تكوين مفاتيح حسابك الحقيقي من Cloudinary
 cloudinary.config(
     cloud_name = "dshnysbzh",
     api_key = "962171128643913",
@@ -31,7 +24,6 @@ cloudinary.config(
     secure = True
 )
 
-# تفعيل نظام الحماية من إغراق السيرفر
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -39,44 +31,32 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# الاتصال بقاعدة بيانات مونجو أطلس العقارية الحية
-MONGO_URI = "mongodb+srv://admin:admin1312312313@aws.rhgcybe.mongodb.net/?appName=aws"
+MONGO_URI = "mongodb+srv://AmedAttia:01025816353aA@cluster0.tz66w.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 client = MongoClient(MONGO_URI)
-db = client['realestate_exclusive_db']
+db = client['borg_elarab_realestate']
 
+users_col = db['users']
 neighborhoods_col = db['neighborhoods']
 properties_col = db['properties']
 leads_col = db['leads']
-users_col = db['users']
 
-def get_time(date_only=False):
+def get_time():
     tz = pytz.timezone('Africa/Cairo')
-    now = datetime.now(tz)
-    return now.strftime('%Y-%m-%d') if date_only else now.strftime('%Y-%m-%d %I:%M %p')
+    return datetime.now(tz).strftime('%Y-%m-%d %I:%M %p')
 
-def safe_float(val):
-    if val is None: return 0.0
-    try: return float(val)
-    except (ValueError, TypeError): return 0.0
-
-# تحويل أي امتداد صورة قادم (Base64) إلى JPEG قياسي عالي النقاء لتوافقه مع المتصفحات و Vercel
 def convert_base64_to_jpeg_bytes(base64_str):
-    if not base64_str or not str(base64_str).startswith('data:image'):
-        return base64_str
-        
     try:
-        header, encoded = base64_str.split(",", 1)
-        image_data = base64.b64decode(encoded)
-        img = Image.open(io.BytesIO(image_data))
-        
-        if img.mode in ('RGBA', 'LA', 'P'):
-            img = img.convert('RGB')
-            
-        output_buffer = io.BytesIO()
-        img.save(output_buffer, format='JPEG', quality=95)
-        return output_buffer.getvalue()
+        if "," in base64_str:
+            base64_str = base64_str.split(",")[1]
+        img_data = base64.b64decode(base64_str)
+        img = Image.open(io.BytesIO(img_data))
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        out_buf = io.BytesIO()
+        img.save(out_buf, format="JPEG", quality=85)
+        return out_buf.getvalue()
     except Exception as e:
-        print(f"❌ Image Conversion Error: {str(e)}")
+        print(f"❌ Error converting image: {str(e)}")
         return None
 
 def init_system_realestate():
@@ -95,91 +75,91 @@ def init_system_realestate():
         "total_sales_tracked": 0
     })
 
-init_system_realestate()
-
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/admin-login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = str(request.json.get('username', '')).strip()
-        password = str(request.json.get('password', '')).strip()
-        user = users_col.find_one({"username": username})
-        if user and check_password_hash(user['password'], password):
-            session['user'] = {"username": user['username'], "role": user['role'], "name": user['name']}
-            return jsonify({"status": "success"})
-        return jsonify({"status": "error", "message": "بيانات الدخول العقارية غير صحيحة"}), 401
+@app.route('/admin')
+def admin_panel():
+    if 'user' not in session:
+        return redirect('/')
     return render_template('admin.html')
 
-@app.route('/admin-logout')
-def logout():
-    session.clear()
-    return redirect('/admin-login')
-
-@app.route('/api/data')
-def get_data():
+@app.route('/api/data', methods=['GET'])
+def get_dashboard_data():
     neighborhoods = list(neighborhoods_col.find({}, {"_id": 0}))
     properties = list(properties_col.find({}, {"_id": 0}))
+    leads = list(leads_col.find({}, {"_id": 0}))
     
-    if 'user' in session:
-        all_leads = list(leads_col.find({}, {"_id": 0}))
-        today = get_time(True)
-        completed_leads = [l for l in all_leads if l.get('status') == 'completed']
+    return jsonify({
+        "neighborhoods": neighborhoods,
+        "properties": properties,
+        "leads": leads
+    })
+
+@app.route('/api/auth', methods=['POST'])
+def handle_auth():
+    data = request.get_json()
+    action = data.get('action')
+    
+    if action == 'login':
+        user = users_col.find_one({"username": data['username']})
+        if user and check_password_hash(user['password'], data['password']):
+            session['user'] = {
+                "username": user['username'],
+                "name": user['name'],
+                "role": user['role']
+            }
+            return jsonify({"status": "success", "user": session['user']})
+        return jsonify({"status": "error", "message": "بيانات الدخول غير صحيحة"}), 401
         
-        stats = {
-            "totalVolume": sum([safe_float(l.get('price', 0)) for l in completed_leads]),
-            "todayLeads": len([l for l in all_leads if str(l.get('date', '')).startswith(today)]),
-            "pendingCount": len([l for l in all_leads if l.get('status') == 'pending']),
-            "staff": list(users_col.find({}, {"_id": 0, "password": 0}))
-        }
-        return jsonify({"neighborhoods": neighborhoods, "properties": properties, "leads": all_leads, "stats": stats, "currentUser": session['user']})
-    
-    return jsonify({"neighborhoods": neighborhoods, "properties": properties})
+    elif action == 'logout':
+        session.pop('user', None)
+        return jsonify({"status": "success"})
 
 @app.route('/api/action', methods=['POST'])
 def handle_action():
-    data = request.json
+    if request.path.startswith('/api/action') and request.method == 'POST':
+        pass
+        
+    data = request.get_json()
     action = data.get('action')
     
     if action == 'new_lead':
-        lead_data = data['lead']
+        lead = data['lead']
         leads_col.insert_one({
-            "leadId": lead_data['leadId'],
-            "propertyTitle": lead_data['propertyTitle'],
-            "price": lead_data['price'],
-            "clientName": lead_data['clientName'],
-            "clientPhone": lead_data['clientPhone'],
-            "date": get_time(),
+            "leadId": lead['leadId'],
+            "propertyTitle": lead['propertyTitle'],
+            "price": lead['price'],
+            "clientName": lead['clientName'],
+            "clientPhone": lead['clientPhone'],
             "status": "pending",
-            "handled_by": ""
+            "created_at": get_time()
         })
         return jsonify({"status": "success"})
-    
-    if 'user' not in session: 
-        return jsonify({"status": "unauthorized"}), 403
+        
+    if 'user' not in session:
+        return jsonify({"status": "error", "message": "غير مصرح به"}), 403
         
     curr = session['user']
     
     if action == 'complete_lead':
-        leads_col.update_one({"leadId": data['leadId']}, {"$set": {"status": "completed", "handled_by": curr['name'], "handled_at": get_time()}})
+        leads_col.update_one({"leadId": data['leadId']}, {"$set": {"status": "completed"}})
         users_col.update_one({"username": curr['username']}, {"$inc": {"total_sales_tracked": 1}})
-            
-    elif action == 'manage_property':
+        
+    elif action == 'property_manage':
         if data['sub'] == 'add':
+            prop = data['property']
             try:
-                prop = data['property']
+                main_bytes = convert_base64_to_jpeg_bytes(prop['image'])
+                if not main_bytes:
+                    return jsonify({"status": "error", "message": "الصورة الرئيسية تالفة"}), 400
                 
-                main_cloud_url = ""
-                if prop.get('image'):
-                    img_bytes = convert_base64_to_jpeg_bytes(prop['image'])
-                    if img_bytes:
-                        up_main = cloudinary.uploader.upload(img_bytes, folder="borg_elarab_properties")
-                        main_cloud_url = up_main.get("secure_url")
-
+                up_main = cloudinary.uploader.upload(main_bytes, folder="borg_elarab_properties")
+                main_cloud_url = up_main.get("secure_url")
+                
                 uploaded_gallery_urls = []
-                if prop.get('images_gallery') and len(prop['images_gallery']) > 0:
+                if 'images_gallery' in prop and isinstance(prop['images_gallery'], list):
                     for img_base64 in prop['images_gallery']:
                         gal_bytes = convert_base64_to_jpeg_bytes(img_base64)
                         if gal_bytes:
@@ -213,4 +193,5 @@ def handle_action():
     return jsonify({"status": "success"})
 
 if __name__ == '__main__':
+    init_system_realestate()
     app.run(host='0.0.0.0', port=8080)
