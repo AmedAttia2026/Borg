@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>لوحة التحكم العقارية VIP | عقارات برج العرب</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.3/dist/heic2any.min.js"></script>
+
+    <style>
+        :root { 
+            --gold: #FFB300; --gold-glow: rgba(255, 179, 0, 0.2);
+            --bg-main: #060913; --bg-panel: #111827; --bg-card: #1F2937;
+            --text-light: #F8FAFC; --text-muted: #9CA3AF; --border: rgba(255, 179, 0, 0.15);
+            --success: #10B981; --danger: #EF4444;
+        }
+        ::-webkit-scrollbar { width: 5px; } 
+        ::-webkit-scrollbar-track { background: var(--bg-main); } 
+        ::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
+        body { background: var(--bg-main); color: var(--text-light); display: flex; min-height: 100vh; overflow-x: hidden; background-image: radial-gradient(circle at top right, #111827, #060913); }
+        #login-screen { position: fixed; inset: 0; z-index: 1000; background: radial-gradient(circle at center, #111827, #060913); display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .login-card { background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(15px); border: 1px solid var(--border); padding: 45px 35px; border-radius: 24px; max-width: 400px; width: 100%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+        .login-input { width: 100%; height: 48px; background: #060913; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 0 15px; color: #fff; margin-bottom: 15px; font-size: 14px; text-align: center; outline: none; }
+        #main-app { display: none; width: 100%; }
+        .sidebar { width: 260px; background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(10px); border-left: 1px solid rgba(255,255,255,0.05); padding: 30px 20px; display: flex; flex-direction: column; gap: 8px; position: fixed; bottom: 0; top: 0; right: 0; z-index: 100; }
+        .sidebar-brand { font-size: 16px; font-weight: 900; color: var(--gold); text-align: center; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; justify-content: center; }
+        .side-btn { background: transparent; border: none; color: var(--text-muted); padding: 12px 15px; border-radius: 10px; text-align: right; cursor: pointer; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 12px; transition: 0.3s; }
+        .side-btn.active, .side-btn:hover { background: rgba(255,179,0,0.08); color: var(--gold); box-shadow: inset -3px 0 0 var(--gold); }
+        .main-content { margin-right: 260px; padding: 40px; width: calc(100% - 260px); }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 35px; }
+        .stat-card { background: linear-gradient(135deg, var(--bg-panel), rgba(31, 41, 55, 0.5)); border: 1px solid rgba(255,255,255,0.05); padding: 22px; border-radius: 16px; position: relative; }
+        .stat-card h3 { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; }
+        .stat-card p { font-size: 22px; font-weight: 900; color: #fff; }
+        .content-section { display: none; }
+        .content-section.active { display: block; }
+        .table-container { background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; overflow: hidden; margin-top: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); }
+        table { width: 100%; border-collapse: collapse; text-align: right; font-size: 13px; }
+        th { background: rgba(255,255,255,0.02); padding: 16px; color: var(--text-muted); font-weight: 700; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 12px; }
+        td { padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.02); color: var(--text-light); vertical-align: middle; }
+        .badge { padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; }
+        .badge-pending { background: rgba(245,158,11,0.12); color: #F59E0B; border: 1px solid rgba(245,158,11,0.2); }
+        .badge-success { background: rgba(16,185,129,0.12); color: #10B981; border: 1px solid rgba(16,185,129,0.2); }
+        .btn { padding: 8px 16px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; transition: 0.3s; }
+        .btn-gold { background: linear-gradient(90deg, #FFB300, #FFD54F); color: #000; }
+        .btn-gold:hover { box-shadow: 0 0 15px rgba(255,179,0,0.3); transform: translateY(-1px); }
+        .btn-danger { background: rgba(239,68,68,0.1); color: #EF4444; border: 1px solid rgba(239,68,68,0.15); }
+        .btn-success { background: rgba(16,185,129,0.1); color: #34D399; border: 1px solid rgba(16,185,129,0.15); }
+        .swal-lux-input { width: 100%; height: 44px; background: #060913 !important; border: 1px solid #374151 !important; border-radius: 8px !important; padding: 0 12px; color: #fff !important; font-size: 13px !important; margin-bottom: 12px; box-sizing: border-box; outline: none; }
+        .swal-lux-file-container { border: 1px dashed rgba(255,179,0,0.3); padding: 12px; border-radius: 8px; background: rgba(6,9,19,0.5); text-align: center; margin-bottom: 12px; cursor: pointer; transition: 0.3s; }
+        .upload-progress-box { background: #060913; border: 1px solid #374151; border-radius: 12px; padding: 15px; margin-top: 10px; text-align: right; }
+        .progress-bar-wrapper { width: 100%; height: 8px; background: #1f2937; border-radius: 4px; overflow: hidden; margin: 10px 0; }
+        .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #FFB300, #10B981); transition: width 0.2s ease; }
+        .uploader-stats-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="login-card">
+            <i class="fas fa-shield-alt fa-3x" style="color:var(--gold); margin-bottom:15px;"></i>
+            <h2 style="font-size:20px; font-weight:900; margin-bottom:25px;">بوابة الإدارة العقارية</h2>
+            <input type="text" id="user" class="login-input" placeholder="اسم الدخول">
+            <input type="password" id="pass" class="login-input" placeholder="كلمة المرور">
+            <button class="btn btn-gold" style="width:100%; height:46px; justify-content:center; font-size:14px;" onclick="handleLogin()">دخول النظام</button>
+        </div>
+    </div>
+
+    <div id="main-app">
+        <aside class="sidebar">
+            <div class="sidebar-brand"><i class="fas fa-chart-line"></i> برج العرب العقارية</div>
+            <button class="side-btn active" onclick="switchSection('leads', this)"><i class="fas fa-clipboard-list"></i> طلبات المعاينة</button>
+            <button class="side-btn" onclick="switchSection('properties', this)"><i class="fas fa-home"></i> إدارة الوحدات</button>
+            <a href="/admin-logout" class="side-btn" style="margin-top:auto; color:var(--danger);"><i class="fas fa-power-off"></i> تسجيل الخروج</a>
+        </aside>
+
+        <main class="main-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>المبيعات والتعاقدات المكتملة</h3>
+                    <p id="stat-volume">0 EGP</p>
+                </div>
+                <div class="stat-card">
+                    <h3>طلبات الحجز اليومية</h3>
+                    <p id="stat-today">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>المعاينات المعلقة حالياً</h3>
+                    <p id="stat-pending">0</p>
+                </div>
+            </div>
+
+            <section id="leads" class="content-section active">
+                <h2>طلبات حجز وزيارات المعاينة الكلية</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr><th>الوحدة المطلوبة</th><th>اسم العميل</th><th>رقم الهاتف</th><th>التاريخ والوقت</th><th>حالة الطلب</th><th>الخيارات</th></tr>
+                        </thead>
+                        <tbody id="leads-list"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="properties" class="content-section">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <h2>الوحدات المعروضة (الحي الثاني والثالث)</h2>
+                    <button class="btn btn-gold" onclick="openAddPropertyModal()"><i class="fas fa-plus-circle"></i> إضافة عقار ومعرض صور جديد</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr><th>صورة العرض</th><th>عنوان الوحدة السكنية</th><th>الموقع والحي</th><th>السعر الإجمالي</th><th>المساحة</th><th>الغرف</th><th>حذف العقار</th></tr>
+                        </thead>
+                        <tbody id="properties-list"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const swalDarkConfig = { background: '#111827', color: '#fff', confirmButtonColor: '#FFB300' };
+
+        async function handleLogin() {
+            const username = document.getElementById('user').value;
+            const password = document.getElementById('pass').value;
+            const res = await fetch('/admin-login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username, password }) });
+            const data = await res.json();
+            if(data.status === 'success') {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('main-app').style.display = 'flex';
+                refreshData();
+            } else {
+                Swal.fire({ ...swalDarkConfig, icon: 'error', title: 'خطأ في الدخول', text: data.message });
+            }
+        }
+
+        function switchSection(secId, btn) {
+            document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(secId).classList.add('active');
+            btn.classList.add('active');
+        }
+
+        async function refreshData() {
+            const res = await fetch('/api/data');
+            const data = await res.json();
+            if(data.stats) {
+                document.getElementById('stat-volume').innerText = data.stats.totalVolume.toLocaleString() + " EGP";
+                document.getElementById('stat-today').innerText = data.stats.todayLeads;
+                document.getElementById('stat-pending').innerText = data.stats.pendingCount;
+            }
+            document.getElementById('leads-list').innerHTML = (data.leads || []).map(l => `
+                <tr>
+                    <td><b>${l.propertyTitle}</b></td>
+                    <td>${l.clientName}</td>
+                    <td><a href="tel:${l.clientPhone}" style="color:var(--gold); text-decoration:none; font-weight:600;">${l.clientPhone}</a></td>
+                    <td style="color:var(--text-muted); font-size:12px;">${l.date}</td>
+                    <td><span class="badge ${l.status === 'pending' ? 'badge-pending' : 'badge-success'}">${l.status === 'pending' ? 'معلق' : 'تم الاتفاق'}</span></td>
+                    <td>
+                        ${l.status === 'pending' ? `<button class="btn btn-success" style="padding:4px 10px; font-size:11px;" onclick="completeLead('${l.leadId}')">إتمام</button>` : ''}
+                        <button class="btn btn-danger" style="padding:4px 10px; font-size:11px;" onclick="deleteLead('${l.leadId}')"><i class="fas fa-trash-alt"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+
+            document.getElementById('properties-list').innerHTML = (data.properties || []).map(p => `
+                <tr>
+                    <td><img src="${p.image}" style="width:55px; height:38px; object-fit:cover; border-radius:6px; border:1px solid rgba(255,255,255,0.05);"></td>
+                    <td><b>${p.title}</b></td>
+                    <td>${p.neighborhoodId === 'DISTRICT_2' ? 'الحي الثاني' : 'الحي الثالث'}</td>
+                    <td style="color:var(--gold); font-weight:bold;">${p.price ? parseInt(p.price).toLocaleString() : 0} EGP</td>
+                    <td>${p.area} م²</td>
+                    <td>${p.beds} غرف</td>
+                    <td><button class="btn btn-danger" style="padding:4px 10px; font-size:11px;" onclick="deleteProperty('${p.id}')">حذف</button></td>
+                </tr>
+            `).join('');
+        }
+
+        // دالة تحويل الصور الذكية والمطورة لتشمل فك ضغط وقراءة الـ HEIC الحصري من آيفون
+        function getSafeImageData(file) {
+            return new Promise(async (resolve) => {
+                try {
+                    let targetFile = file;
+                    // فحص إذا كان امتداد الصورة ينتهي بـ HEIC أو HEIF لترجمته فوراً
+                    if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+                        if (typeof heic2any !== "undefined") {
+                            const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+                            targetFile = new File([convertedBlob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: "image/jpeg" });
+                        }
+                    }
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = () => resolve(null);
+                    reader.readAsDataURL(targetFile);
+                } catch(e) {
+                    resolve(null);
+                }
+            });
+        }
+
+        async function openAddPropertyModal() {
+            const { value: formValues } = await Swal.fire({
+                title: `<span style="font-size:16px; font-weight:900; color:var(--gold);"><i class="fas fa-folder-plus"></i> إضافة عقار ومعرض صور جديد</span>`,
+                background: '#111827', color: '#fff', confirmButtonColor: '#FFB300',
+                confirmButtonText: '<i class="fas fa-cloud-upload-alt"></i> حفظ العقار ومزامنة الصور',
+                showCancelButton: true, cancelButtonText: 'إلغاء',
+                html: `
+                    <div style="margin-top:10px; text-align:right;">
+                        <input id="p-title" class="swal-lux-input" placeholder="عنوان العقار (مثال: منزل منفصل مساحة واسعة)">
+                        <select id="p-district" class="swal-lux-input">
+                            <option value="DISTRICT_2">الحي الثاني (فيلات ومنازل)</option>
+                            <option value="DISTRICT_3">الحي الثالث (فيلات ومنازل)</option>
+                        </select>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                            <input id="p-price" type="number" class="swal-lux-input" placeholder="السعر (EGP)">
+                            <input id="p-area" type="number" class="swal-lux-input" placeholder="المساحة (م²)">
+                        </div>
+                        <input id="p-beds" type="number" class="swal-lux-input" placeholder="عدد غرف النوم">
+                        
+                        <div class="swal-lux-file-container" onclick="document.getElementById('p-main-file').click()">
+                            <i class="fas fa-image" style="color:var(--gold); margin-bottom:4px;"></i>
+                            <p style="font-size:11px; color:#fff;" id="main-lbl-txt">الصورة الرئيسية (تدعم كافة الصيغ و HEIC)</p>
+                            <input id="p-main-file" type="file" accept="image/*, .heic, .heif" style="display:none;" onchange="document.getElementById('main-lbl-txt').innerText = this.files[0].name">
+                        </div>
+
+                        <div class="swal-lux-file-container" style="border-color:rgba(255,255,255,0.15);" onclick="document.getElementById('p-gallery-files').click()">
+                            <i class="fas fa-images" style="color:var(--text-muted); margin-bottom:4px;"></i>
+                            <p style="font-size:11px; color:var(--text-muted);" id="gallery-lbl-txt">ألبوم الصور الإضافية (اختر عدة صور معاً)</p>
+                            <input id="p-gallery-files" type="file" accept="image/*, .heic, .heif" multiple style="display:none;" onchange="document.getElementById('gallery-lbl-txt').innerText = 'تم تحديد ' + this.files.length + ' صور للمعرض'">
+                        </div>
+                    </div>
+                `,
+                preConfirm: async () => {
+                    const title = document.getElementById('p-title').value;
+                    const neighborhoodId = document.getElementById('p-district').value;
+                    const price = document.getElementById('p-price').value;
+                    const area = document.getElementById('p-area').value;
+                    const beds = document.getElementById('p-beds').value;
+                    const mainFile = document.getElementById('p-main-file').files[0];
+                    const galleryFiles = document.getElementById('p-gallery-files').files;
+
+                    if (!title || !price || !area || !beds || !mainFile) {
+                        return Swal.showValidationMessage('يرجى كتابة كافة تفاصيل البيت ورفع الصورة الرئيسية على الأقل');
+                    }
+
+                    return { title, neighborhoodId, price, area, beds, mainFile, galleryFiles };
+                }
+            });
+
+            if(formValues) {
+                Swal.fire({
+                    title: 'جاري معالجة الامتدادات والرفع المباشر...',
+                    background: '#111827', color: '#fff', allowOutsideClick: false, showConfirmButton: false,
+                    html: `
+                        <div class="upload-progress-box">
+                            <p style="font-size:13px; font-weight:bold; color:var(--gold);" id="upload-status-title">جاري فك وتشفير جودة الصور الفائقة...</p>
+                            <div class="progress-bar-wrapper">
+                                <div class="progress-bar-fill" id="upload-bar"></div>
+                            </div>
+                            <div class="uploader-stats-row">
+                                <span style="color:#fff;" id="upload-percent">0%</span>
+                                <span style="color:var(--text-muted);" id="upload-ratio">0 / 0 ملف</span>
+                            </div>
+                            <div class="uploader-stats-row" style="margin-top:10px; border-top:1px solid #2d3748; padding-top:8px;">
+                                <span style="color:#10B981;"><i class="fas fa-check-circle"></i> نجح المعالجة: <span id="upload-success-cnt">0</span></span>
+                                <span style="color:#EF4444;"><i class="fas fa-times-circle"></i> فشل: <span id="upload-fail-cnt">0</span></span>
+                            </div>
+                        </div>
+                    `
+                });
+
+                const totalFiles = 1 + formValues.galleryFiles.length;
+                let loadedCount = 0; let successCount = 0; let failCount = 0;
+
+                const updateUI = () => {
+                    const percent = Math.round((loadedCount / totalFiles) * 100);
+                    document.getElementById('upload-bar').style.width = percent + '%';
+                    document.getElementById('upload-percent').innerText = percent + '%';
+                    document.getElementById('upload-ratio').innerText = `${loadedCount} / ${totalFiles} ملف`;
+                    document.getElementById('upload-success-cnt').innerText = successCount;
+                    document.getElementById('upload-fail-cnt').innerText = failCount;
+                };
+
+                // معالجة الملفات مع الفحص الفوري للنجاح والفشل
+                const processAndTrack = async (file, isMain = false) => {
+                    const base64Result = await getSafeImageData(file);
+                    loadedCount++;
+                    if(base64Result) {
+                        successCount++;
+                        if(isMain) document.getElementById('upload-status-title').innerText = 'تمت قراءة الصورة الرئيسية وجاري رفع الكتالوج...';
+                    } else {
+                        failCount++;
+                    }
+                    updateUI();
+                    return base64Result;
+                };
+
+                document.getElementById('upload-ratio').innerText = `0 / ${totalFiles} ملف`;
+                
+                const mainImageBase64 = await processAndTrack(formValues.mainFile, true);
+                
+                const galleryPromises = Array.from(formValues.galleryFiles).map(f => processAndTrack(f, false));
+                const rawGalleryResults = await Promise.all(galleryPromises);
+                const cleanGalleryImages = rawGalleryResults.filter(img => img !== null);
+
+                document.getElementById('upload-status-title').innerText = 'جاري نقل الميديا المشفرة إلى Cloudinary وحفظها بـ MongoDB...';
+                
+                const payload = {
+                    id: "PROP_" + Date.now(),
+                    neighborhoodId: formValues.neighborhoodId,
+                    title: formValues.title,
+                    price: formValues.price,
+                    area: formValues.area,
+                    beds: formValues.beds,
+                    image: mainImageBase64,
+                    images_gallery: cleanGalleryImages
+                };
+
+                try {
+                    const res = await fetch('/api/action', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'manage_property', sub: 'add', property: payload }) });
+                    const responseData = await res.json();
+                    
+                    if(res.ok && responseData.status === 'success') {
+                        Swal.fire({ ...swalDarkConfig, icon: 'success', title: 'اكتمل الرفع والمزامنة فوراً', html: `تم حفظ العقار بجميع امتدادات الصور بنجاح في السحابة ومونجو.` });
+                        refreshData();
+                    } else {
+                        Swal.fire({ ...swalDarkConfig, icon: 'error', title: 'فشل الرفع الميداني', text: responseData.message });
+                    }
+                } catch (error) {
+                    Swal.fire({ ...swalDarkConfig, icon: 'error', title: 'خطأ في السيرفر', text: 'حدث انهيار داخلي في خادم Flask، تحقق من مدخلات الـ Config.' });
+                }
+            }
+        }
+
+        async function completeLead(leadId) {
+            await fetch('/api/action', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'complete_lead', leadId }) });
+            refreshData();
+        }
+        async function deleteLead(leadId) {
+            await fetch('/api/action', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'delete_lead', leadId }) });
+            refreshData();
+        }
+        async function deleteProperty(id) {
+            await fetch('/api/action', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'manage_property', sub: 'delete', id }) });
+            refreshData();
+        }
+    </script>
+</body>
+</html>

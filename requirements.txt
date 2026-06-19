@@ -1,0 +1,6 @@
+Flask
+pymongo
+dnspython
+pytz
+cloudinary
+Pillow
