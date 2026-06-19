@@ -16,7 +16,11 @@ from PIL import Image
 import cloudinary
 import cloudinary.uploader
 
-app = Flask(__name__, template_folder='../templates')
+# 🛠️ الحل السحابي الذكي: تحديد مسار الـ templates ديناميكياً ليتوافق هيدروليكياً مع بيئة Vercel Serverless
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+template_dir = os.path.join(base_dir, 'templates')
+
+app = Flask(__name__, template_folder=template_dir if os.path.exists(template_dir) else 'templates')
 app.secret_key = "Borg_Elarab_REALESTATE_VIP_2026_Secure"
 
 # تكوين مفاتيح حسابك الحقيقي من Cloudinary
@@ -35,7 +39,7 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# الاتصال بقاعدة بيانات مونجو أطلس
+# الاتصال بقاعدة بيانات مونجو أطلس العقارية الحية
 MONGO_URI = "mongodb+srv://admin:admin1312312313@aws.rhgcybe.mongodb.net/?appName=aws"
 client = MongoClient(MONGO_URI)
 db = client['realestate_exclusive_db']
@@ -55,7 +59,7 @@ def safe_float(val):
     try: return float(val)
     except (ValueError, TypeError): return 0.0
 
-# تحويل أي امتداد صورة قادم (Base64) هيدروليكياً إلى JPEG قياسي عالي النقاء لتوافقه مع المتصفحات
+# تحويل أي امتداد صورة قادم (Base64) إلى JPEG قياسي عالي النقاء لتوافقه مع المتصفحات و Vercel
 def convert_base64_to_jpeg_bytes(base64_str):
     if not base64_str or not str(base64_str).startswith('data:image'):
         return base64_str
@@ -63,16 +67,13 @@ def convert_base64_to_jpeg_bytes(base64_str):
     try:
         header, encoded = base64_str.split(",", 1)
         image_data = base64.b64decode(encoded)
-        
-        # فتح الصورة بمكتبة Pillow لمعالجة امتدادها أياً كان
         img = Image.open(io.BytesIO(image_data))
         
-        # تحويل صيغ الألوان مثل RGBA القادمة من PNG أو الأجهزة الحديثة لـ RGB لتناسب الـ JPEG
         if img.mode in ('RGBA', 'LA', 'P'):
             img = img.convert('RGB')
             
         output_buffer = io.BytesIO()
-        img.save(output_buffer, format='JPEG', quality=95) # حفظ بأعلى جودة بكسل ونقاء
+        img.save(output_buffer, format='JPEG', quality=95)
         return output_buffer.getvalue()
     except Exception as e:
         print(f"❌ Image Conversion Error: {str(e)}")
@@ -170,7 +171,6 @@ def handle_action():
             try:
                 prop = data['property']
                 
-                # المعالجة والرفع الذكي للصورة الرئيسية أياً كان امتدادها الأصلي
                 main_cloud_url = ""
                 if prop.get('image'):
                     img_bytes = convert_base64_to_jpeg_bytes(prop['image'])
@@ -178,7 +178,6 @@ def handle_action():
                         up_main = cloudinary.uploader.upload(img_bytes, folder="borg_elarab_properties")
                         main_cloud_url = up_main.get("secure_url")
 
-                # المعالجة والرفع الذكي لكافة امتدادات صور الألبوم
                 uploaded_gallery_urls = []
                 if prop.get('images_gallery') and len(prop['images_gallery']) > 0:
                     for img_base64 in prop['images_gallery']:
