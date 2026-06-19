@@ -16,11 +16,10 @@ from PIL import Image
 import cloudinary
 import cloudinary.uploader
 
-# تعيين مسار مجلد القوالب للخروج خطوة للخلف للوصول للجذر (Root) من داخل مجلد api
 app = Flask(__name__, template_folder='../templates')
 app.secret_key = "Borg_Elarab_REALESTATE_VIP_2026_Secure"
 
-# تكوين مفاتيح حسابك من Cloudinary
+# تكوين مفاتيح حسابك الحقيقي من Cloudinary
 cloudinary.config(
     cloud_name = "dshnysbzh",
     api_key = "962171128643913",
@@ -37,36 +36,48 @@ limiter = Limiter(
 )
 
 # الاتصال بقاعدة بيانات مونجو أطلس
-MONGO_URI = "mongodb+srv://AmedAttia:01025816353aA@cluster0.tz66w.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+MONGO_URI = "mongodb+srv://admin:admin1312312313@aws.rhgcybe.mongodb.net/?appName=aws"
 client = MongoClient(MONGO_URI)
-db = client['borg_elarab_realestate']
+db = client['realestate_exclusive_db']
 
-users_col = db['users']
 neighborhoods_col = db['neighborhoods']
 properties_col = db['properties']
 leads_col = db['leads']
+users_col = db['users']
 
-def get_time():
+def get_time(date_only=False):
     tz = pytz.timezone('Africa/Cairo')
-    return datetime.now(tz).strftime('%Y-%m-%d %I:%M %p')
+    now = datetime.now(tz)
+    return now.strftime('%Y-%m-%d') if date_only else now.strftime('%Y-%m-%d %I:%M %p')
 
-# تحويل أي امتداد صورة قادم (Base64) هيدروليكياً إلى JPEG قياسي عالي النقاء
+def safe_float(val):
+    if val is None: return 0.0
+    try: return float(val)
+    except (ValueError, TypeError): return 0.0
+
+# تحويل أي امتداد صورة قادم (Base64) هيدروليكياً إلى JPEG قياسي عالي النقاء لتوافقه مع المتصفحات
 def convert_base64_to_jpeg_bytes(base64_str):
+    if not base64_str or not str(base64_str).startswith('data:image'):
+        return base64_str
+        
     try:
-        if "," in base64_str:
-            base64_str = base64_str.split(",")[1]
-        img_data = base64.b64decode(base64_str)
-        img = Image.open(io.BytesIO(img_data))
-        if img.mode in ("RGBA", "P", "LA"):
-            img = img.convert("RGB")
-        out_buf = io.BytesIO()
-        img.save(out_buf, format="JPEG", quality=85)
-        return out_buf.getvalue()
+        header, encoded = base64_str.split(",", 1)
+        image_data = base64.b64decode(encoded)
+        
+        # فتح الصورة بمكتبة Pillow لمعالجة امتدادها أياً كان
+        img = Image.open(io.BytesIO(image_data))
+        
+        # تحويل صيغ الألوان مثل RGBA القادمة من PNG أو الأجهزة الحديثة لـ RGB لتناسب الـ JPEG
+        if img.mode in ('RGBA', 'LA', 'P'):
+            img = img.convert('RGB')
+            
+        output_buffer = io.BytesIO()
+        img.save(output_buffer, format='JPEG', quality=95) # حفظ بأعلى جودة بكسل ونقاء
+        return output_buffer.getvalue()
     except Exception as e:
-        print(f"❌ Error converting image: {str(e)}")
+        print(f"❌ Image Conversion Error: {str(e)}")
         return None
 
-# دالة تهيئة النظام الافتراضية
 def init_system_realestate():
     if neighborhoods_col.count_documents({}) == 0:
         neighborhoods_col.insert_many([
@@ -83,31 +94,28 @@ def init_system_realestate():
         "total_sales_tracked": 0
     })
 
-# --- الروابط والمسارات (Routes) ---
+init_system_realestate()
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# فتح صفحة الـ admin مباشرة دون توجيه داخلي لمنع الـ Loop على سيرفر Vercel
-@app.route('/admin')
-def admin_page():
-    return render_template('admin.html')
-
-@app.route('/admin-login', methods=['POST'])
+@app.route('/admin-login', methods=['GET', 'POST'])
 def login():
-    username = str(request.json.get('username', '')).strip()
-    password = str(request.json.get('password', '')).strip()
-    user = users_col.find_one({"username": username})
-    if user and check_password_hash(user['password'], password):
-        session['user'] = {"username": user['username'], "role": user['role'], "name": user['name']}
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error", "message": "بيانات الدخول العقارية غير صحيحة"}), 401
+    if request.method == 'POST':
+        username = str(request.json.get('username', '')).strip()
+        password = str(request.json.get('password', '')).strip()
+        user = users_col.find_one({"username": username})
+        if user and check_password_hash(user['password'], password):
+            session['user'] = {"username": user['username'], "role": user['role'], "name": user['name']}
+            return jsonify({"status": "success"})
+        return jsonify({"status": "error", "message": "بيانات الدخول العقارية غير صحيحة"}), 401
+    return render_template('admin.html')
 
 @app.route('/admin-logout')
 def logout():
     session.clear()
-    return redirect('/')
+    return redirect('/admin-login')
 
 @app.route('/api/data')
 def get_data():
@@ -116,17 +124,14 @@ def get_data():
     
     if 'user' in session:
         all_leads = list(leads_col.find({}, {"_id": 0}))
+        today = get_time(True)
         completed_leads = [l for l in all_leads if l.get('status') == 'completed']
         
-        # دالة حماية لاحتساب الأسعار بأمان
-        def get_float(v):
-            try: return float(str(v).replace(',', '').split()[0]) if v else 0.0
-            except: return 0.0
-
         stats = {
-            "totalVolume": sum([get_float(l.get('price', 0)) for l in completed_leads]),
-            "todayLeads": len(all_leads),
-            "pendingCount": len([l for l in all_leads if l.get('status') == 'pending'])
+            "totalVolume": sum([safe_float(l.get('price', 0)) for l in completed_leads]),
+            "todayLeads": len([l for l in all_leads if str(l.get('date', '')).startswith(today)]),
+            "pendingCount": len([l for l in all_leads if l.get('status') == 'pending']),
+            "staff": list(users_col.find({}, {"_id": 0, "password": 0}))
         }
         return jsonify({"neighborhoods": neighborhoods, "properties": properties, "leads": all_leads, "stats": stats, "currentUser": session['user']})
     
@@ -164,6 +169,8 @@ def handle_action():
         if data['sub'] == 'add':
             try:
                 prop = data['property']
+                
+                # المعالجة والرفع الذكي للصورة الرئيسية أياً كان امتدادها الأصلي
                 main_cloud_url = ""
                 if prop.get('image'):
                     img_bytes = convert_base64_to_jpeg_bytes(prop['image'])
@@ -171,6 +178,7 @@ def handle_action():
                         up_main = cloudinary.uploader.upload(img_bytes, folder="borg_elarab_properties")
                         main_cloud_url = up_main.get("secure_url")
 
+                # المعالجة والرفع الذكي لكافة امتدادات صور الألبوم
                 uploaded_gallery_urls = []
                 if prop.get('images_gallery') and len(prop['images_gallery']) > 0:
                     for img_base64 in prop['images_gallery']:
@@ -194,6 +202,7 @@ def handle_action():
                 return jsonify({"status": "success"})
                 
             except Exception as e:
+                print(f"❌ Cloudinary Runtime Error: {str(e)}")
                 return jsonify({"status": "error", "message": f"خطأ ميديا: {str(e)}"}), 500
             
         elif data['sub'] == 'delete':
@@ -204,7 +213,5 @@ def handle_action():
     
     return jsonify({"status": "success"})
 
-# حصر تشغيل الدالة التلقائي للمحلي فقط لمنع حظر خوادم Vercel
 if __name__ == '__main__':
-    init_system_realestate()
     app.run(host='0.0.0.0', port=8080)
