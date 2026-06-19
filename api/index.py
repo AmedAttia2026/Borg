@@ -9,14 +9,18 @@ from flask_limiter.util import get_remote_address
 from datetime import datetime
 import pytz
 
+# استيراد مكتبة Pillow لمعالجة وتحويل كافة امتدادات الصور
 from PIL import Image
 
+# استيراد مكتبات Cloudinary الرسمية
 import cloudinary
 import cloudinary.uploader
 
+# تعيين مسار مجلد القوالب للخروج خطوة للخلف للوصول للجذر (Root) من داخل مجلد api
 app = Flask(__name__, template_folder='../templates')
 app.secret_key = "Borg_Elarab_REALESTATE_VIP_2026_Secure"
 
+# تكوين مفاتيح حسابك من Cloudinary
 cloudinary.config(
     cloud_name = "dshnysbzh",
     api_key = "962171128643913",
@@ -24,6 +28,7 @@ cloudinary.config(
     secure = True
 )
 
+# تفعيل نظام الحماية من إغراق السيرفر
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -31,6 +36,7 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
+# الاتصال بقاعدة بيانات مونجو أطلس
 MONGO_URI = "mongodb+srv://AmedAttia:01025816353aA@cluster0.tz66w.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 client = MongoClient(MONGO_URI)
 db = client['borg_elarab_realestate']
@@ -44,13 +50,14 @@ def get_time():
     tz = pytz.timezone('Africa/Cairo')
     return datetime.now(tz).strftime('%Y-%m-%d %I:%M %p')
 
+# تحويل أي امتداد صورة قادم (Base64) هيدروليكياً إلى JPEG قياسي عالي النقاء
 def convert_base64_to_jpeg_bytes(base64_str):
     try:
         if "," in base64_str:
             base64_str = base64_str.split(",")[1]
         img_data = base64.b64decode(base64_str)
         img = Image.open(io.BytesIO(img_data))
-        if img.mode in ("RGBA", "P"):
+        if img.mode in ("RGBA", "P", "LA"):
             img = img.convert("RGB")
         out_buf = io.BytesIO()
         img.save(out_buf, format="JPEG", quality=85)
@@ -59,6 +66,7 @@ def convert_base64_to_jpeg_bytes(base64_str):
         print(f"❌ Error converting image: {str(e)}")
         return None
 
+# دالة تهيئة النظام الافتراضية
 def init_system_realestate():
     if neighborhoods_col.count_documents({}) == 0:
         neighborhoods_col.insert_many([
@@ -75,91 +83,96 @@ def init_system_realestate():
         "total_sales_tracked": 0
     })
 
+# --- الروابط والمسارات (Routes) ---
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
+# فتح صفحة الـ admin مباشرة دون توجيه داخلي لمنع الـ Loop على سيرفر Vercel
 @app.route('/admin')
-def admin_panel():
-    if 'user' not in session:
-        return redirect('/')
+def admin_page():
     return render_template('admin.html')
 
-@app.route('/api/data', methods=['GET'])
-def get_dashboard_data():
+@app.route('/admin-login', methods=['POST'])
+def login():
+    username = str(request.json.get('username', '')).strip()
+    password = str(request.json.get('password', '')).strip()
+    user = users_col.find_one({"username": username})
+    if user and check_password_hash(user['password'], password):
+        session['user'] = {"username": user['username'], "role": user['role'], "name": user['name']}
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "بيانات الدخول العقارية غير صحيحة"}), 401
+
+@app.route('/admin-logout')
+def logout():
+    session.clear()
+    return redirect('/')
+
+@app.route('/api/data')
+def get_data():
     neighborhoods = list(neighborhoods_col.find({}, {"_id": 0}))
     properties = list(properties_col.find({}, {"_id": 0}))
-    leads = list(leads_col.find({}, {"_id": 0}))
     
-    return jsonify({
-        "neighborhoods": neighborhoods,
-        "properties": properties,
-        "leads": leads
-    })
-
-@app.route('/api/auth', methods=['POST'])
-def handle_auth():
-    data = request.get_json()
-    action = data.get('action')
-    
-    if action == 'login':
-        user = users_col.find_one({"username": data['username']})
-        if user and check_password_hash(user['password'], data['password']):
-            session['user'] = {
-                "username": user['username'],
-                "name": user['name'],
-                "role": user['role']
-            }
-            return jsonify({"status": "success", "user": session['user']})
-        return jsonify({"status": "error", "message": "بيانات الدخول غير صحيحة"}), 401
+    if 'user' in session:
+        all_leads = list(leads_col.find({}, {"_id": 0}))
+        completed_leads = [l for l in all_leads if l.get('status') == 'completed']
         
-    elif action == 'logout':
-        session.pop('user', None)
-        return jsonify({"status": "success"})
+        # دالة حماية لاحتساب الأسعار بأمان
+        def get_float(v):
+            try: return float(str(v).replace(',', '').split()[0]) if v else 0.0
+            except: return 0.0
+
+        stats = {
+            "totalVolume": sum([get_float(l.get('price', 0)) for l in completed_leads]),
+            "todayLeads": len(all_leads),
+            "pendingCount": len([l for l in all_leads if l.get('status') == 'pending'])
+        }
+        return jsonify({"neighborhoods": neighborhoods, "properties": properties, "leads": all_leads, "stats": stats, "currentUser": session['user']})
+    
+    return jsonify({"neighborhoods": neighborhoods, "properties": properties})
 
 @app.route('/api/action', methods=['POST'])
 def handle_action():
-    if request.path.startswith('/api/action') and request.method == 'POST':
-        pass
-        
-    data = request.get_json()
+    data = request.json
     action = data.get('action')
     
     if action == 'new_lead':
-        lead = data['lead']
+        lead_data = data['lead']
         leads_col.insert_one({
-            "leadId": lead['leadId'],
-            "propertyTitle": lead['propertyTitle'],
-            "price": lead['price'],
-            "clientName": lead['clientName'],
-            "clientPhone": lead['clientPhone'],
+            "leadId": lead_data['leadId'],
+            "propertyTitle": lead_data['propertyTitle'],
+            "price": lead_data['price'],
+            "clientName": lead_data['clientName'],
+            "clientPhone": lead_data['clientPhone'],
+            "date": get_time(),
             "status": "pending",
-            "created_at": get_time()
+            "handled_by": ""
         })
         return jsonify({"status": "success"})
-        
-    if 'user' not in session:
-        return jsonify({"status": "error", "message": "غير مصرح به"}), 403
+    
+    if 'user' not in session: 
+        return jsonify({"status": "unauthorized"}), 403
         
     curr = session['user']
     
     if action == 'complete_lead':
-        leads_col.update_one({"leadId": data['leadId']}, {"$set": {"status": "completed"}})
+        leads_col.update_one({"leadId": data['leadId']}, {"$set": {"status": "completed", "handled_by": curr['name'], "handled_at": get_time()}})
         users_col.update_one({"username": curr['username']}, {"$inc": {"total_sales_tracked": 1}})
-        
-    elif action == 'property_manage':
+            
+    elif action == 'manage_property':
         if data['sub'] == 'add':
-            prop = data['property']
             try:
-                main_bytes = convert_base64_to_jpeg_bytes(prop['image'])
-                if not main_bytes:
-                    return jsonify({"status": "error", "message": "الصورة الرئيسية تالفة"}), 400
-                
-                up_main = cloudinary.uploader.upload(main_bytes, folder="borg_elarab_properties")
-                main_cloud_url = up_main.get("secure_url")
-                
+                prop = data['property']
+                main_cloud_url = ""
+                if prop.get('image'):
+                    img_bytes = convert_base64_to_jpeg_bytes(prop['image'])
+                    if img_bytes:
+                        up_main = cloudinary.uploader.upload(img_bytes, folder="borg_elarab_properties")
+                        main_cloud_url = up_main.get("secure_url")
+
                 uploaded_gallery_urls = []
-                if 'images_gallery' in prop and isinstance(prop['images_gallery'], list):
+                if prop.get('images_gallery') and len(prop['images_gallery']) > 0:
                     for img_base64 in prop['images_gallery']:
                         gal_bytes = convert_base64_to_jpeg_bytes(img_base64)
                         if gal_bytes:
@@ -181,7 +194,6 @@ def handle_action():
                 return jsonify({"status": "success"})
                 
             except Exception as e:
-                print(f"❌ Cloudinary Runtime Error: {str(e)}")
                 return jsonify({"status": "error", "message": f"خطأ ميديا: {str(e)}"}), 500
             
         elif data['sub'] == 'delete':
@@ -192,6 +204,7 @@ def handle_action():
     
     return jsonify({"status": "success"})
 
+# حصر تشغيل الدالة التلقائي للمحلي فقط لمنع حظر خوادم Vercel
 if __name__ == '__main__':
     init_system_realestate()
     app.run(host='0.0.0.0', port=8080)
